@@ -1,0 +1,141 @@
+{
+  "id": "cinejoy",
+  "name": "Cinejoy",
+  "version": "1.0.0",
+  "apiVersion": 9,
+  "streamHosts": "any",
+  "browser": true,
+  "entry": "plugin.js",
+  "icon": "icon.png",
+  "description": "Películas y series con pantalla propia: el catálogo de TMDB y el video del reproductor de la página pública de Cinejoy, con subtítulos en español e inglés",
+  "author": "xuper-plugin",
+  "homepage": "https://github.com/xuper-plugin/kino-plugin-cinejoy",
+  "color": "#95FF50",
+  "categories": [
+    "movies",
+    "series"
+  ],
+  "theme": {
+    "accent": "#95FF50",
+    "onAccent": "#0B1200",
+    "background": "#0A0D08",
+    "surface": "#141A0F",
+    "highlight": "#C8FF9E"
+  },
+  "section": {
+    "label": "Cinejoy",
+    "labelEn": "Cinejoy"
+  },
+  "hosts": [
+    "image.tmdb.org",
+    "cinejoy.pk",
+    "subs.wing.st"
+  ],
+  "capabilities": [
+    "search",
+    "home",
+    "browse",
+    "episodes",
+    "resolve"
+  ],
+  "settings": [
+    {
+      "key": "subtitlesSection",
+      "type": "section",
+      "label": "Subtítulos",
+      "labelEn": "Subtitles",
+      "hint": "Cuáles van primero en el reproductor; los del otro idioma quedan después.",
+      "hintEn": "Which come first in the player; the other language's follow."
+    },
+    {
+      "key": "subLang",
+      "type": "select",
+      "label": "Idioma preferido",
+      "labelEn": "Preferred language",
+      "default": "es",
+      "options": [
+        {
+          "value": "es",
+          "label": "Español",
+          "labelEn": "Spanish"
+        },
+        {
+          "value": "en",
+          "label": "Inglés",
+          "labelEn": "English"
+        }
+      ]
+    },
+    {
+      "key": "homeSection",
+      "type": "section",
+      "label": "Inicio de Kino",
+      "labelEn": "Kino's Home"
+    },
+    {
+      "key": "homeRows",
+      "type": "toggle",
+      "label": "Filas en Inicio",
+      "labelEn": "Rows on Home",
+      "default": true,
+      "hint": "Muestra tendencias y estrenos de películas y series en el Inicio de Kino.",
+      "hintEn": "Shows trending and new movies and series on Kino's Home."
+    },
+    {
+      "key": "toolsSection",
+      "type": "section",
+      "label": "Herramientas",
+      "labelEn": "Tools"
+    },
+    {
+      "key": "clearCache",
+      "type": "action",
+      "label": "Borrar caché",
+      "labelEn": "Clear cache"
+    }
+  ],
+  "enhancements": {
+    "14": {
+      "capabilities": [
+        "screen"
+      ],
+      "screen": {
+        "label": "Cinejoy",
+        "labelEn": "Cinejoy",
+        "icon": "movie",
+        "menuOpens": "screen",
+        "opensFrom": [
+          "menu",
+          "settings"
+        ],
+        "settingsButton": {
+          "label": "Abrir Cinejoy",
+          "labelEn": "Open Cinejoy"
+        },
+        "settingsIn": "both"
+      }
+    },
+    "19": {
+      "capabilities": [
+        "screen"
+      ]
+    },
+    "20": {
+      "capabilities": [
+        "screen"
+      ],
+      "consumes": {
+        "social": {
+          "repo": "kinotvapp/kino-social",
+          "door": "wall",
+          "calls": [
+            "share"
+          ]
+        }
+      }
+    }
+  },
+  "recommends": [
+    "kinotvapp/kino-social"
+  ]
+}
