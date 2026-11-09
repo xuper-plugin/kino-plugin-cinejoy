@@ -3,7 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { install, movie, STORAGE_LIMIT } from "./helpers.mjs";
 import { sectionPage, buildRows, browsePage, homeRows, savedHome, shelfInfo, keptRows, TABS, TAB_IDS, HOME_KEY, HOME_JOBS } from "../src/catalog.js";
-import { cached, write, read, kept, clear, ENTRY_MAX, HARD_TTL_MS, FRESH_SHELF_MS } from "../src/cache.js";
+import { cached, write, read, kept, clear, setWithRoom, ENTRY_MAX, HARD_TTL_MS, FRESH_SHELF_MS, CACHE_BUDGET } from "../src/cache.js";
+import { saveHome } from "../src/catalog.js";
 import { home, section, browse, categories, search, episodes, details } from "../plugin.js";
 
 const answer = (path, params) => ({
@@ -207,4 +208,41 @@ test("section() is the same page the screen builds", async () => {
   const a = await section({ tab: "series" });
   assert.equal(a.tab, "series");
   assert.equal(keptRows(TABS.series).length, TABS.series.length);
+});
+
+test("the shelf cache keeps to its budget, so Home's copy and the tabs' copies always find room", () => {
+  const { kino } = install({});
+  const realNow = Date.now;
+  try {
+    let t = 2_000_000;
+    Date.now = () => (t += 1000);
+    // every shelf of every tab, as the prefetch loads them: 30 entries of ~12 KB would fill all 256 KB
+    for (let i = 0; i < 30; i++) assert.equal(write("shelf2:movie:g" + i + ":es", "z".repeat(12 * 1024)), true);
+    const used = kino.storage.keys().filter((k) => k.startsWith("c1:")).reduce((n, k) => n + k.length + kino.storage.get(k).length, 0);
+    assert.ok(used <= CACHE_BUDGET, "cache stays within its budget: " + used);
+    // the screen's own copies still fit afterwards
+    const rows = [{ id: "r", title: "R", items: Array.from({ length: 20 }, (_, i) => ({ id: "m:" + i, ref: "m:" + i, title: "Título " + i, poster: "/p" + i + ".jpg" })) }];
+    assert.equal(saveHome(rows), true, "home1 was kept");
+    assert.ok(kino.storage.get(HOME_KEY), "home1 is there");
+    assert.equal(setWithRoom("browse1:inicio", "q".repeat(18 * 1024), { ttlMs: 1 }), true);
+    assert.equal(setWithRoom("browse1:peliculas", "q".repeat(18 * 1024), { ttlMs: 1 }), true);
+    assert.equal(setWithRoom("browse1:series", "q".repeat(18 * 1024), { ttlMs: 1 }), true);
+    assert.ok(kino.storage.keys().join("").length < STORAGE_LIMIT);
+  } finally { Date.now = realNow; }
+});
+
+test("setWithRoom evicts the oldest cache entries when storage is full and never touches other keys", () => {
+  const { kino } = install({});
+  kino.storage.set("home1", "h".repeat(60 * 1024), {});
+  kino.storage.set("logo1", "l".repeat(5 * 1024), {});
+  const realNow = Date.now;
+  try {
+    let t = 3_000_000;
+    Date.now = () => (t += 1000);
+    for (let i = 0; i < 4; i++) write("old" + i, "o".repeat(40 * 1024));
+    assert.equal(setWithRoom("browse1:inicio", "n".repeat(60 * 1024), {}), true);
+    assert.ok(kino.storage.get("home1"), "home1 untouched");
+    assert.ok(kino.storage.get("logo1"), "logo1 untouched");
+    assert.equal(kino.storage.get("browse1:inicio").length, 60 * 1024);
+  } finally { Date.now = realNow; }
 });

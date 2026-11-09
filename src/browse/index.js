@@ -12,6 +12,7 @@ import { tabOf, recentOf, cardOf, playedKey, TAB_IDS } from "./model.js";
 import { browseView, searchView, settingsView, detailPage } from "./view.js";
 import { loadDetail, pushOf } from "./detail.js";
 import { makeLogoCache } from "./logos.js";
+import { setWithRoom } from "../cache.js";
 import { openShare, sendShare } from "./share.js";
 
 const TAB_KEY = "browseTab";
@@ -33,7 +34,7 @@ export function makeBrowse({ kino, loadTab, searchTitles, keptTab = () => null }
   const memo = new Map(); // tab -> { data, whole: loaded in this sandbox }
   const log = (...a) => { try { kino.log("[cinejoy]", ...a); } catch (_) { /* no log */ } };
   const get = (k) => { try { return kino.storage.get(k); } catch (_) { return null; } };
-  const set = (k, v, opts) => { try { kino.storage.set(k, v, opts); } catch (_) { /* full storage: no copy */ } };
+  const set = (k, v, opts) => setWithRoom(k, v, opts);
 
   // ---- the kept copy of a tab ----
   function readSnap(tab) {

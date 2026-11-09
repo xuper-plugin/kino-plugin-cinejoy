@@ -9,6 +9,9 @@ export const HARD_TTL_MS = 24 * 3600 * 1000;
 export const ENTRY_MAX = 48 * 1024;
 export const FRESH_SHELF_MS = 6 * 3600 * 1000;
 export const FRESH_ART_MS = 12 * 3600 * 1000;
+// The shelf cache never takes more than this of the 256 KB, so the screen's own copies (home1, browse1:<tab>, ~60 KB), the
+// logo book and the search history always find room. Over it the oldest cache entry goes before a new one is written.
+export const CACHE_BUDGET = 120 * 1024;
 
 const store = () => globalThis.kino.storage;
 
@@ -35,10 +38,18 @@ export function kept(key) {
   return e ? e.v : undefined;
 }
 
-function evictOldest() {
+/** Characters the cache entries hold now. */
+function used() {
+  let n = 0;
+  for (const k of keys()) { try { n += (store().get(k) || "").length + k.length; } catch (_) { /* unreadable: counts nothing */ } }
+  return n;
+}
+
+function evictOldest(except = "") {
   let victim = null;
   let oldest = Infinity;
   for (const k of keys()) {
+    if (k === except) continue;
     let at = 0;
     try { at = JSON.parse(store().get(k) || "{}").at || 0; } catch (_) { /* unreadable: the first to go */ }
     if (at < oldest) { oldest = at; victim = k; }
@@ -53,11 +64,32 @@ export function write(key, v) {
   let raw;
   try { raw = JSON.stringify({ at: Date.now(), v }); } catch (_) { return false; }
   if (raw.length > ENTRY_MAX) return false;
+  // Within the cache's own budget first: older entries go until this one fits (it replaces its own previous copy).
+  try {
+    let total = used() - ((store().get(PREFIX + key) || "").length);
+    for (let guard = 0; total + raw.length > CACHE_BUDGET && guard < 40; guard++) {
+      if (!evictOldest(PREFIX + key)) break;
+      total = used() - ((store().get(PREFIX + key) || "").length);
+    }
+  } catch (_) { /* storage unreadable: the write below decides */ }
   for (let tries = 0; tries < 30; tries++) {
     try {
       store().set(PREFIX + key, raw, { ttlMs: HARD_TTL_MS });
       return true;
     } catch (e) {
+      if (!e || e.code !== "too_large" || !evictOldest()) return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Stores [text] under [key] (the screen's own copies: home1, browse1:<tab>) and, when storage is full, drops the oldest cache
+ * entries until it fits: a copy of what the person last saw is worth more than a shelf. Returns whether it was kept; never throws.
+ */
+export function setWithRoom(key, text, opts) {
+  for (let tries = 0; tries < 40; tries++) {
+    try { store().set(key, text, opts); return true; } catch (e) {
       if (!e || e.code !== "too_large" || !evictOldest()) return false;
     }
   }

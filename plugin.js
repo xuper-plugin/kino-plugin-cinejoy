@@ -280,6 +280,7 @@ var HARD_TTL_MS = 24 * 3600 * 1e3;
 var ENTRY_MAX = 48 * 1024;
 var FRESH_SHELF_MS = 6 * 3600 * 1e3;
 var FRESH_ART_MS = 12 * 3600 * 1e3;
+var CACHE_BUDGET = 120 * 1024;
 var store = () => globalThis.kino.storage;
 var keys = () => {
   try {
@@ -306,10 +307,21 @@ function kept(key) {
   const e = read(key);
   return e ? e.v : void 0;
 }
-function evictOldest() {
+function used() {
+  let n = 0;
+  for (const k of keys()) {
+    try {
+      n += (store().get(k) || "").length + k.length;
+    } catch (_) {
+    }
+  }
+  return n;
+}
+function evictOldest(except = "") {
   let victim = null;
   let oldest = Infinity;
   for (const k of keys()) {
+    if (k === except) continue;
     let at = 0;
     try {
       at = JSON.parse(store().get(k) || "{}").at || 0;
@@ -336,9 +348,28 @@ function write(key, v) {
     return false;
   }
   if (raw.length > ENTRY_MAX) return false;
+  try {
+    let total = used() - (store().get(PREFIX + key) || "").length;
+    for (let guard = 0; total + raw.length > CACHE_BUDGET && guard < 40; guard++) {
+      if (!evictOldest(PREFIX + key)) break;
+      total = used() - (store().get(PREFIX + key) || "").length;
+    }
+  } catch (_) {
+  }
   for (let tries = 0; tries < 30; tries++) {
     try {
       store().set(PREFIX + key, raw, { ttlMs: HARD_TTL_MS });
+      return true;
+    } catch (e) {
+      if (!e || e.code !== "too_large" || !evictOldest()) return false;
+    }
+  }
+  return false;
+}
+function setWithRoom(key, text, opts) {
+  for (let tries = 0; tries < 40; tries++) {
+    try {
+      store().set(key, text, opts);
       return true;
     } catch (e) {
       if (!e || e.code !== "too_large" || !evictOldest()) return false;
@@ -496,8 +527,7 @@ function saveHome(rows) {
     for (let per = 20; per >= 4; per -= 4) {
       const text = JSON.stringify({ at: Date.now(), rows: rows.map((r) => ({ ...r, items: r.items.slice(0, per) })) });
       if (text.length <= HOME_MAX) {
-        kino.storage.set(HOME_KEY, text, { ttlMs: HOME_TTL_MS });
-        return true;
+        return setWithRoom(HOME_KEY, text, { ttlMs: HOME_TTL_MS });
       }
     }
   } catch (_) {
@@ -761,11 +791,11 @@ function recentOf(keys2, tabs) {
     }
   }
   const out = [];
-  const used = /* @__PURE__ */ new Set();
+  const used2 = /* @__PURE__ */ new Set();
   for (const key of keys2) {
     const card = byKey.get(key);
-    if (card && !used.has(card.id)) {
-      used.add(card.id);
+    if (card && !used2.has(card.id)) {
+      used2.add(card.id);
       out.push(card);
     }
   }
@@ -1376,12 +1406,7 @@ function makeBrowse({ kino: kino2, loadTab, searchTitles: searchTitles2, keptTab
       return null;
     }
   };
-  const set = (k, v, opts) => {
-    try {
-      kino2.storage.set(k, v, opts);
-    } catch (_) {
-    }
-  };
+  const set = (k, v, opts) => setWithRoom(k, v, opts);
   function readSnap(tab) {
     try {
       const o = JSON.parse(get(SNAP_PREFIX + tab) || "null");

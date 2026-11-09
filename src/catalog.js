@@ -5,7 +5,7 @@
 import { t, both, langOf } from "./i18n.js";
 import { tmdb, toItem } from "./tmdb.js";
 import { shelfRef, parseShelfRef } from "./refs.js";
-import { cached, kept, FRESH_SHELF_MS, FRESH_ART_MS } from "./cache.js";
+import { cached, kept, setWithRoom, FRESH_SHELF_MS, FRESH_ART_MS } from "./cache.js";
 
 const MAX_PAGE = 500; // TMDB serves at most 500 pages
 const ROW_MAX = 20;
@@ -153,7 +153,7 @@ export function saveHome(rows) {
   try {
     for (let per = 20; per >= 4; per -= 4) {
       const text = JSON.stringify({ at: Date.now(), rows: rows.map((r) => ({ ...r, items: r.items.slice(0, per) })) });
-      if (text.length <= HOME_MAX) { kino.storage.set(HOME_KEY, text, { ttlMs: HOME_TTL_MS }); return true; }
+      if (text.length <= HOME_MAX) { return setWithRoom(HOME_KEY, text, { ttlMs: HOME_TTL_MS }); }
     }
   } catch (_) { /* full storage: no copy */ }
   return false;
