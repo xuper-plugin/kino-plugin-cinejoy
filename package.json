@@ -1,0 +1,13 @@
+{
+  "name": "kino-plugin-cinejoy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/plugin.js --bundle --format=esm --target=es2020 --loader:.png=dataurl --outfile=plugin.js",
+    "icon": "node scripts/make-icon.mjs",
+    "test": "node --test test/*.test.mjs",
+    "validate": "npm run build && node sdk/validate.mjs . --repo xuper-plugin/kino-plugin-cinejoy",
+    "package": "npm run build && node scripts/package.mjs"
+  },
+  "devDependencies": { "esbuild": "^0.21.0" }
+}
