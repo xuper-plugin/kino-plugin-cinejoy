@@ -154,6 +154,54 @@ async function streamFor(p, url) {
   const alternatives = rest.slice(0, MAX_ALTERNATIVES).map((m) => ({ url: m.url, ...(Object.keys(m.headers).length ? { headers: m.headers } : {}) }));
   if (alternatives.length) stream.alternatives = alternatives;
   if (subtitles.length) stream.subtitles = subtitles;
+  remember(url, first);
+  return stream;
+}
+
+// ---- the stream a title played, kept ----
+// The page always leads to the same address for a title (lightspeed.st/hls/<uuid>/1/master.m3u8, measured twice on a Redmi,
+// 2026-11-22), which answers any client that sends the page's Referer. So the stream a capture found is kept per title; the next
+// play of it (a resume, the next day) peeks at it and plays it at once, with no hidden page (~10 s each). A kept stream that no
+// longer answers is dropped and the page is captured again.
+const KEPT_PREFIX = "stream1:";
+const KEPT_MS = 7 * 24 * 3600 * 1000;
+const PEEK_MS = 5000;
+
+function remember(url, media) {
+  try { kino.storage.set(KEPT_PREFIX + url, JSON.stringify({ at: Date.now(), url: media.url, headers: media.headers || {}, mime: media.mime || "" }), { ttlMs: KEPT_MS }); } catch (_) { /* full storage: capture next time */ }
+}
+
+function keptFor(url) {
+  try {
+    const o = JSON.parse(kino.storage.get(KEPT_PREFIX + url) || "null");
+    return o && typeof o.url === "string" && /^https:\/\//.test(o.url) && Date.now() - o.at < KEPT_MS ? o : null;
+  } catch (_) { return null; }
+}
+
+/** Whether a kept stream still answers: 2 KB of it; a playlist must read like one. */
+async function answers(kept) {
+  try {
+    const r = await kino.fetch(kept.url, { headers: { ...kept.headers, Range: "bytes=0-2047" }, timeoutMs: PEEK_MS, maxBytes: 2048 });
+    if (!r.ok) return false;
+    return !/\.m3u8(\?|$)/i.test(kept.url) || /^\s*#EXTM3U/.test(r.text() || "");
+  } catch (e) {
+    return !!(e && e.code === "too_large");
+  }
+}
+
+async function keptStream(p, url) {
+  const kept = keptFor(url);
+  if (!kept) return null;
+  const subsPromise = subtitlesFor(p);
+  if (!(await answers(kept))) {
+    try { kino.storage.remove(KEPT_PREFIX + url); } catch (_) { /* gone anyway */ }
+    kino.log("[cinejoy] kept stream no longer answers: capturing again");
+    return null;
+  }
+  const subtitles = await subsPromise;
+  const stream = { url: kept.url, label: "Cinejoy", ...(kept.mime ? { mime: kept.mime } : {}), ...(Object.keys(kept.headers).length ? { headers: kept.headers } : {}) };
+  if (subtitles.length) stream.subtitles = subtitles;
+  kino.log("[cinejoy] kept stream answers: no hidden page");
   return stream;
 }
 
@@ -162,6 +210,8 @@ export async function resolveRef(ref) {
   const p = parseTitleRef(ref);
   const url = watchUrl(p);
   if (!url) throw fail("not_found", "notFound", "not a playable ref");
+  const kept = await keptStream(p, url);
+  if (kept) return kept;
   if (!canCapture()) throw fail("unavailable", "noBrowser", "kino.browser.capture missing");
   if (inFlight) {
     if (inFlight.url === url) return inFlight.promise;

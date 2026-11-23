@@ -44,7 +44,7 @@ test("no secret host sneaks in: nothing from the site's video API is named", () 
 test("the manifest asks for the hidden page and any stream host, and the contract accepts it", () => {
   assert.equal(manifest.browser, true);
   assert.equal(manifest.streamHosts, "any");
-  assert.equal(fetchAnyHost(manifest), false);
+  assert.equal(fetchAnyHost(manifest), true, "the kept stream is peeked at on its own CDN (lightspeed.st) without a permission dialog");
   const verdict = validateManifest(readFileSync(join(ROOT, "kino-plugin.json"), "utf8"));
   assert.equal(verdict.ok, true, JSON.stringify(verdict.errors || verdict.error || verdict));
 });

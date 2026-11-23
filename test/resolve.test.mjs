@@ -155,3 +155,27 @@ test("one capture at a time: the same title joins the one in flight, another tit
   install({ browser: capturing({ media: [{ url: "https://cdn/b.m3u8", headers: H }], subtitles: [], finalUrl: "x" }) });
   assert.equal((await resolveRef("m:6")).url, "https://cdn/b.m3u8");
 });
+
+test("the stream a title played is kept: the next play peeks at it and needs no hidden page; a dead one is captured again", async () => {
+  const seen = [];
+  const playlistUp = { up: true };
+  const fetch = async (url, opts) => {
+    if (url.startsWith("https://subs.wing.st/")) return { ok: true, status: 200, url, json: () => SUBS };
+    if (url === "https://cdn/kept/master.m3u8") {
+      assert.equal(opts.maxBytes, 2048, "a peek, never the whole file");
+      return playlistUp.up ? { ok: true, status: 206, url, text: () => "#EXTM3U\n" } : { ok: false, status: 404, url, text: () => "" };
+    }
+    return { ok: false, status: 404, url, text: () => "" };
+  };
+  install({ browser: capturing({ media: [{ url: "https://cdn/kept/master.m3u8", headers: H }], subtitles: [], finalUrl: "x" }, seen), fetch });
+  const first = await resolveRef("m:777");
+  assert.equal(first.url, "https://cdn/kept/master.m3u8");
+  assert.equal(seen.length, 1, "the first play captures the page");
+  const again = await resolveRef("m:777");
+  assert.equal(again.url, "https://cdn/kept/master.m3u8");
+  assert.equal(again.headers.Referer, "https://cinejoy.pk/");
+  assert.equal(seen.length, 1, "the second play reuses the kept stream: no hidden page");
+  playlistUp.up = false;
+  await resolveRef("m:777");
+  assert.equal(seen.length, 2, "a kept stream that no longer answers is captured again");
+});

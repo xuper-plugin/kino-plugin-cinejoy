@@ -250,8 +250,8 @@ async function seriesEpisodes(id) {
   const seasons = (show.seasons || []).filter((s) => s.season_number > 0);
   const batches = [];
   for (let i = 0; i < seasons.length; i += 20) batches.push(seasons.slice(i, i + 20));
-  const answers = await Promise.all(batches.map((b) => tmdb(`/tv/${id}`, { append_to_response: b.map((s) => `season/${s.season_number}`).join(",") })));
-  const fetched = batches.flatMap((b, i) => b.map((s) => answers[i][`season/${s.season_number}`] || {}));
+  const answers2 = await Promise.all(batches.map((b) => tmdb(`/tv/${id}`, { append_to_response: b.map((s) => `season/${s.season_number}`).join(",") })));
+  const fetched = batches.flatMap((b, i) => b.map((s) => answers2[i][`season/${s.season_number}`] || {}));
   const episodes2 = fetched.flatMap((sd, i) => (sd.episodes || []).map((ep) => {
     const out = { season: seasons[i].season_number, number: ep.episode_number, ref: episodeRef(id, seasons[i].season_number, ep.episode_number) };
     if (ep.name) out.title = ep.name;
@@ -704,12 +704,59 @@ async function streamFor(p, url) {
   const alternatives = rest.slice(0, MAX_ALTERNATIVES).map((m) => ({ url: m.url, ...Object.keys(m.headers).length ? { headers: m.headers } : {} }));
   if (alternatives.length) stream.alternatives = alternatives;
   if (subtitles.length) stream.subtitles = subtitles;
+  remember(url, first);
+  return stream;
+}
+var KEPT_PREFIX = "stream1:";
+var KEPT_MS = 7 * 24 * 3600 * 1e3;
+var PEEK_MS = 5e3;
+function remember(url, media) {
+  try {
+    kino.storage.set(KEPT_PREFIX + url, JSON.stringify({ at: Date.now(), url: media.url, headers: media.headers || {}, mime: media.mime || "" }), { ttlMs: KEPT_MS });
+  } catch (_) {
+  }
+}
+function keptFor(url) {
+  try {
+    const o = JSON.parse(kino.storage.get(KEPT_PREFIX + url) || "null");
+    return o && typeof o.url === "string" && /^https:\/\//.test(o.url) && Date.now() - o.at < KEPT_MS ? o : null;
+  } catch (_) {
+    return null;
+  }
+}
+async function answers(kept2) {
+  try {
+    const r = await kino.fetch(kept2.url, { headers: { ...kept2.headers, Range: "bytes=0-2047" }, timeoutMs: PEEK_MS, maxBytes: 2048 });
+    if (!r.ok) return false;
+    return !/\.m3u8(\?|$)/i.test(kept2.url) || /^\s*#EXTM3U/.test(r.text() || "");
+  } catch (e) {
+    return !!(e && e.code === "too_large");
+  }
+}
+async function keptStream(p, url) {
+  const kept2 = keptFor(url);
+  if (!kept2) return null;
+  const subsPromise = subtitlesFor(p);
+  if (!await answers(kept2)) {
+    try {
+      kino.storage.remove(KEPT_PREFIX + url);
+    } catch (_) {
+    }
+    kino.log("[cinejoy] kept stream no longer answers: capturing again");
+    return null;
+  }
+  const subtitles = await subsPromise;
+  const stream = { url: kept2.url, label: "Cinejoy", ...kept2.mime ? { mime: kept2.mime } : {}, ...Object.keys(kept2.headers).length ? { headers: kept2.headers } : {} };
+  if (subtitles.length) stream.subtitles = subtitles;
+  kino.log("[cinejoy] kept stream answers: no hidden page");
   return stream;
 }
 async function resolveRef(ref) {
   const p = parseTitleRef(ref);
   const url = watchUrl(p);
   if (!url) throw fail("not_found", "notFound", "not a playable ref");
+  const kept2 = await keptStream(p, url);
+  if (kept2) return kept2;
   if (!canCapture()) throw fail("unavailable", "noBrowser", "kino.browser.capture missing");
   if (inFlight) {
     if (inFlight.url === url) return inFlight.promise;
@@ -1445,7 +1492,7 @@ function makeBrowse({ kino: kino2, loadTab, searchTitles: searchTitles2, keptTab
     const t2 = get(TAB_KEY);
     return TAB_IDS.includes(t2) ? t2 : null;
   };
-  const remember = (tab) => set(TAB_KEY, tab);
+  const remember2 = (tab) => set(TAB_KEY, tab);
   function dataOf(tab) {
     if (memo.has(tab)) return memo.get(tab).data;
     const snap = readSnap(tab) || keptSeed(tab) || homeSeed(tab);
@@ -1571,7 +1618,7 @@ function makeBrowse({ kino: kino2, loadTab, searchTitles: searchTitles2, keptTab
     tab({ value, arg, state }) {
       const tab = TAB_IDS.includes(value) ? value : TAB_IDS.includes(arg) ? arg : null;
       if (!tab) return null;
-      remember(tab);
+      remember2(tab);
       dataOf(tab);
       const failed = { ...state.failed || {} };
       delete failed[tab];
