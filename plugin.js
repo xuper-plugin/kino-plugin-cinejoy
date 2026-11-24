@@ -1,3 +1,37 @@
+// src/door.js
+var CATALOG_MAX = 40;
+var OVERVIEW_MAX = 300;
+var HTTPS = /^https:\/\//;
+function catalogItems(found) {
+  const out = [];
+  const list = Array.isArray(found) ? found : found && Array.isArray(found.items) ? found.items : [];
+  for (const it of list) {
+    if (out.length >= CATALOG_MAX) break;
+    if (!it || typeof it.id !== "string" || !it.id || typeof it.ref !== "string" || !it.ref || typeof it.title !== "string" || !it.title) continue;
+    const item = { id: it.id, ref: it.ref, title: it.title, kind: typeof it.kind === "string" && it.kind ? it.kind : "movie" };
+    if (typeof it.poster === "string" && HTTPS.test(it.poster)) item.poster = it.poster;
+    if (typeof it.backdrop === "string" && HTTPS.test(it.backdrop)) item.backdrop = it.backdrop;
+    if (it.year !== void 0 && it.year !== null && String(it.year)) item.year = String(it.year);
+    if (typeof it.overview === "string" && it.overview.trim()) item.overview = it.overview.trim().slice(0, OVERVIEW_MAX);
+    const tmdb2 = it.ids && Number.isInteger(it.ids.tmdb) ? it.ids.tmdb : Number.isInteger(it.tmdb) ? it.tmdb : 0;
+    if (tmdb2 > 0) item.tmdb = tmdb2;
+    out.push(item);
+  }
+  return out;
+}
+function catalogQuery(arg) {
+  const q = String(arg && arg.q || "").trim().slice(0, 200);
+  const type = arg && (arg.type === "movie" || arg.type === "series") ? arg.type : "any";
+  return { q, type, season: 0, episode: 0, tmdbId: 0, year: 0, originalTitle: "", altTitles: [], cursor: null };
+}
+function catalogDoor(search2) {
+  return async (arg) => {
+    const query = catalogQuery(arg);
+    if (!query.q) return [];
+    return catalogItems(await search2(query));
+  };
+}
+
 // src/i18n.js
 var WORDS = {
   es: {
@@ -587,7 +621,9 @@ function readSettings(kino2 = globalThis.kino) {
 // src/resolve.js
 var SITE = "https://cinejoy.pk";
 var SUBS = "https://subs.wing.st/subtitles";
-var CAPTURE_MS = 24e3;
+var CAPTURE_MS = 25e3;
+var RESOLVE_BUDGET_MS = 7e4;
+var MAX_ATTEMPTS = 2;
 var SUBS_MS = 6e3;
 var MAX_SUBS = 30;
 var MAX_ALTERNATIVES = 3;
@@ -668,18 +704,25 @@ async function captureOf(url) {
     opts.captureAll = true;
     opts.alsoMatch = [ALSO_MATCH];
   }
-  try {
-    return await kino.browser.capture(url, opts);
-  } catch (e) {
-    const code = e && e.code || "error";
-    kino.log("[cinejoy] capture", code);
-    if (code === "timeout") throw fail("unavailable", "timeout", "capture timeout");
-    if (code === "blocked") throw fail("unavailable", "blocked", "capture blocked");
-    if (code === "busy") throw fail("unavailable", "busy", "capture busy");
-    if (code === "browser_unavailable") throw fail("unavailable", "noBrowser", "no web view");
-    if (code === "not_allowed") throw fail("unavailable", "notAllowed", "capture not allowed");
-    throw fail("not_found", "notFound", "capture failed: " + code);
+  const started = Date.now();
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await kino.browser.capture(url, opts);
+    } catch (e) {
+      const code = e && e.code || "error";
+      kino.log("[cinejoy] capture", code, "attempt", attempt);
+      if (code === "timeout" && attempt < MAX_ATTEMPTS && Date.now() - started + CAPTURE_MS < RESOLVE_BUDGET_MS) continue;
+      throw captureFailure(code);
+    }
   }
+}
+function captureFailure(code) {
+  if (code === "timeout") return fail("unavailable", "timeout", "capture timeout");
+  if (code === "blocked") return fail("unavailable", "blocked", "capture blocked");
+  if (code === "busy") return fail("unavailable", "busy", "capture busy");
+  if (code === "browser_unavailable") return fail("unavailable", "noBrowser", "no web view");
+  if (code === "not_allowed") return fail("unavailable", "notAllowed", "capture not allowed");
+  return fail("not_found", "notFound", "capture failed: " + code);
 }
 var inFlight = null;
 async function streamFor(p, url) {
@@ -774,11 +817,11 @@ var MAX_SLIDES = 6;
 var MAX_RAILS = 8;
 var MAX_RAIL_ITEMS = 20;
 var MAX_SLIDE_TEXT = 160;
-var HTTPS = /^https:\/\//;
+var HTTPS2 = /^https:\/\//;
 function cardOf(item) {
   const out = { id: item.id, ref: item.ref, title: item.title, kind: item.kind };
-  if (item.poster && HTTPS.test(item.poster)) out.poster = item.poster;
-  if (item.backdrop && HTTPS.test(item.backdrop)) out.backdrop = item.backdrop;
+  if (item.poster && HTTPS2.test(item.poster)) out.poster = item.poster;
+  if (item.backdrop && HTTPS2.test(item.backdrop)) out.backdrop = item.backdrop;
   if (item.rating !== void 0) out.rating = item.rating;
   if (item.year !== void 0) out.year = item.year;
   if (item.ids && item.ids.tmdb) out.ids = { tmdb: item.ids.tmdb };
@@ -790,7 +833,7 @@ function slidesOf(rows) {
   for (const row of rows) {
     for (const item of row.items) {
       if (out.length >= MAX_SLIDES) return out;
-      if (seen.has(item.id) || !item.backdrop || !HTTPS.test(item.backdrop)) continue;
+      if (seen.has(item.id) || !item.backdrop || !HTTPS2.test(item.backdrop)) continue;
       const text = typeof item.overview === "string" ? item.overview.trim() : "";
       if (text === "") continue;
       seen.add(item.id);
@@ -952,7 +995,7 @@ var shareBarButton = () => ({
 });
 
 // src/browse/detail.js
-var HTTPS2 = /^https:\/\//;
+var HTTPS3 = /^https:\/\//;
 var MAX_EPISODES = 80;
 var MAX_CAST = 12;
 var LEAD_MAX = 140;
@@ -966,7 +1009,7 @@ var num = (v) => {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : 0;
 };
-var https = (v) => typeof v === "string" && HTTPS2.test(v) && v.length <= 2048 ? v : void 0;
+var https = (v) => typeof v === "string" && HTTPS3.test(v) && v.length <= 2048 ? v : void 0;
 var tmdbLang2 = () => langOf() === "en" ? "en-US" : "es-MX";
 var opensPage = (card) => !!card && (card.kind === "movie" || card.kind === "series") && typeof card.id === "string" && !!parseTitleRef(card.ref) && parseTitleRef(card.ref).kind !== "episode";
 var cardNode = (card, size, scope) => ({
@@ -1295,7 +1338,8 @@ function browseView({ tab, data, recent, pending, failed, device = "phone", shar
       mergeWithKinoBar: true,
       dense: true,
       divider: false,
-      leading: { type: "IconButton", key: "close", icon: "close", ...twin2("brClose", "labelText"), ...twin2("brClose", "tooltip"), onPressed: { go: { close: true } } },
+      // A back arrow, not an X, like the author's other plugins (owner, 2026-11-23): it leaves the screen.
+      leading: { type: "IconButton", key: "close", icon: "arrow_back", ...twin2("brBack", "labelText"), ...twin2("brBack", "tooltip"), onPressed: { go: { close: true } } },
       // On a TV the search is a button of the bar (a floating one is hard to reach with a remote); elsewhere it floats.
       // Share (text only, to Kino Social), then settings; on a TV search leads.
       actions: tv ? [{ type: "IconButton", key: "searchButton", icon: "search", ...twin2("brSearch", "labelText"), ...twin2("brSearch", "tooltip"), onPressed: "openSearch" }, shareBarButton(), gear] : [shareBarButton(), gear],
@@ -1368,7 +1412,7 @@ function detailPage({ r, entry, season, share = null }) {
 var KEY = "logo1";
 var MAX = 120;
 var CALL_MS = 8e3;
-var HTTPS3 = /^https:\/\//;
+var HTTPS4 = /^https:\/\//;
 function makeLogoCache({ kino: kino2, clock = { now: () => Date.now() } }) {
   const usable = () => {
     try {
@@ -1398,7 +1442,7 @@ function makeLogoCache({ kino: kino2, clock = { now: () => Date.now() } }) {
   }
   function logoOf(id) {
     const l = read2()[id];
-    return typeof l === "string" && HTTPS3.test(l) ? l : void 0;
+    return typeof l === "string" && HTTPS4.test(l) ? l : void 0;
   }
   async function fill2(slides, budgetMs) {
     if (!usable()) return 0;
@@ -1704,6 +1748,7 @@ function makeBrowse({ kino: kino2, loadTab, searchTitles: searchTitles2, keptTab
 
 // src/plugin.js
 var tmdbFailure = (e) => e && ["timeout", "network", "unavailable", "rate_limited"].includes(e.code) ? kino.error("unavailable", "tmdb: " + e.code, { userMessage: t("tmdbDown") }) : e;
+var proto_catalog_search = catalogDoor(search);
 async function search(query) {
   const q = typeof query === "string" ? query : query && query.q || "";
   let items;
@@ -1795,6 +1840,7 @@ export {
   details,
   episodes,
   home,
+  proto_catalog_search,
   resolve,
   screen,
   screenEvent,

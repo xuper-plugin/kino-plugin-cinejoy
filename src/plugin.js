@@ -3,6 +3,7 @@
 //
 // Exports Kino calls: search, home, browse, section, categories, episodes, details, resolve, the screen's screen and
 // screenEvent, and the settings form's action. Refs: see refs.js. `npm run build` bundles this folder into the single plugin.js.
+import { catalogDoor } from "./door.js";
 import { t } from "./i18n.js";
 import { searchTitles, seriesEpisodes, movieInfo } from "./tmdb.js";
 import { homeRows, browsePage, sectionPage, categoryTiles, keptRows, TABS } from "./catalog.js";
@@ -17,6 +18,9 @@ const tmdbFailure = (e) => (e && ["timeout", "network", "unavailable", "rate_lim
   : e);
 
 /** `search(query)`: movies and series matching the words; the kind Kino leans to goes first. */
+// The catalog door (Kino's plugin protocol): Da-Video and the author's other plugins find titles here.
+export const proto_catalog_search = catalogDoor(search);
+
 export async function search(query) {
   const q = typeof query === "string" ? query : (query && query.q) || "";
   let items;

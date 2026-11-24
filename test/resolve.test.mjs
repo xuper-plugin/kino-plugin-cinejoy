@@ -76,7 +76,7 @@ test("resolve a movie: opens the public watch page with every-match capture and 
   assert.equal(seen.length, 1);
   assert.equal(seen[0].url, "https://cinejoy.pk/watch/movie/603");
   assert.equal(seen[0].opts.captureAll, true);
-  assert.equal(seen[0].opts.timeoutMs, 24000);
+  assert.equal(seen[0].opts.timeoutMs, 25000);
   assert.deepEqual(seen[0].opts.alsoMatch, [ALSO_MATCH]);
   assert.equal(seen[0].opts.match, undefined, "Kino's default video pattern");
   assert.equal(s.url, "https://cdn/master.m3u8");
@@ -105,7 +105,7 @@ test("a Kino without captureAll gets a plain capture; subtitle failures never fa
   const seen = [];
   install({ browser: { capture: async (url, opts) => { seen.push(opts); return { media: [{ url: "https://cdn/a.m3u8", headers: H }], subtitles: [], finalUrl: url }; } } });
   const s = await resolveRef("m:1");
-  assert.deepEqual(seen[0], { timeoutMs: 24000 });
+  assert.deepEqual(seen[0], { timeoutMs: 25000 });
   assert.equal(s.url, "https://cdn/a.m3u8");
   assert.equal(s.subtitles, undefined);
 });
@@ -178,4 +178,16 @@ test("the stream a title played is kept: the next play peeks at it and needs no 
   playlistUp.up = false;
   await resolveRef("m:777");
   assert.equal(seen.length, 2, "a kept stream that no longer answers is captured again");
+});
+
+test("a capture that runs out of time is tried once more (the page's scripts then come from the cache); a blocked one is not", async () => {
+  let n = 0;
+  install({ browser: { captureAll: true, capture: async (url) => { n++; if (n === 1) throw Object.assign(new Error("timeout"), { code: "timeout" }); return { media: [{ url: "https://cdn/a.m3u8", headers: H }], subtitles: [], finalUrl: url }; } } });
+  const s = await resolveRef("m:278");
+  assert.equal(n, 2);
+  assert.match(s.url, /a\.m3u8/);
+  let b = 0;
+  install({ browser: { captureAll: true, capture: async () => { b++; throw Object.assign(new Error("blocked"), { code: "blocked" }); } } });
+  await assert.rejects(resolveRef("m:279"), (e) => e.code === "unavailable");
+  assert.equal(b, 1, "a human check is never asked twice");
 });

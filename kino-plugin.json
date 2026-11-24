@@ -1,7 +1,7 @@
 {
   "id": "cinejoy",
   "name": "Cinejoy",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "apiVersion": 9,
   "streamHosts": "any",
   "browser": true,
@@ -132,6 +132,33 @@
           "calls": [
             "share"
           ]
+        }
+      },
+      "provides": {
+        "catalog": {
+          "summary": "Titles this plugin finds, for the author's other plugins",
+          "calls": {
+            "search": {
+              "in": {
+                "q": "string",
+                "type": "string?"
+              },
+              "out": "Item[]"
+            }
+          },
+          "types": {
+            "Item": {
+              "id": "string",
+              "ref": "string",
+              "title": "string",
+              "kind": "string",
+              "poster": "string?",
+              "backdrop": "string?",
+              "year": "string?",
+              "overview": "string?",
+              "tmdb": "number?"
+            }
+          }
         }
       }
     }

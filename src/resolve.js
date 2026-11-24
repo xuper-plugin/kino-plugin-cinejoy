@@ -15,7 +15,10 @@ import { readSettings } from "./settings.js";
 
 export const SITE = "https://cinejoy.pk";
 const SUBS = "https://subs.wing.st/subtitles";
-const CAPTURE_MS = 24000;
+// Kino's own limit for one hidden page (PluginBrowser.MAX_TIMEOUT_MS); a resolve that opens pages gets 75 s in all.
+const CAPTURE_MS = 25000;
+const RESOLVE_BUDGET_MS = 70000;
+const MAX_ATTEMPTS = 2;
 const SUBS_MS = 6000;
 const MAX_SUBS = 30;
 const MAX_ALTERNATIVES = 3;
@@ -116,18 +119,30 @@ async function captureOf(url) {
     opts.captureAll = true;
     opts.alsoMatch = [ALSO_MATCH];
   }
-  try {
-    return await kino.browser.capture(url, opts);
-  } catch (e) {
-    const code = (e && e.code) || "error";
-    kino.log("[cinejoy] capture", code);
-    if (code === "timeout") throw fail("unavailable", "timeout", "capture timeout");
-    if (code === "blocked") throw fail("unavailable", "blocked", "capture blocked");
-    if (code === "busy") throw fail("unavailable", "busy", "capture busy");
-    if (code === "browser_unavailable") throw fail("unavailable", "noBrowser", "no web view");
-    if (code === "not_allowed") throw fail("unavailable", "notAllowed", "capture not allowed");
-    throw fail("not_found", "notFound", "capture failed: " + code);
+  const started = Date.now();
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await kino.browser.capture(url, opts);
+    } catch (e) {
+      const code = (e && e.code) || "error";
+      kino.log("[cinejoy] capture", code, "attempt", attempt);
+      // The page's own start (its scripts, then a sealed request that took 1.5-7 s) put the video at 12-17 s on a Redmi and
+      // past the capture's limit when slower (2026-11-23). A second page loads its scripts from the cache and usually makes
+      // it: once, and only while Kino's resolve limit still has room for a whole capture.
+      if (code === "timeout" && attempt < MAX_ATTEMPTS && Date.now() - started + CAPTURE_MS < RESOLVE_BUDGET_MS) continue;
+      throw captureFailure(code);
+    }
   }
+}
+
+/** The person's sentence for a capture that ended with [code]. */
+function captureFailure(code) {
+  if (code === "timeout") return fail("unavailable", "timeout", "capture timeout");
+  if (code === "blocked") return fail("unavailable", "blocked", "capture blocked");
+  if (code === "busy") return fail("unavailable", "busy", "capture busy");
+  if (code === "browser_unavailable") return fail("unavailable", "noBrowser", "no web view");
+  if (code === "not_allowed") return fail("unavailable", "notAllowed", "capture not allowed");
+  return fail("not_found", "notFound", "capture failed: " + code);
 }
 
 let inFlight = null; // { url, promise }: the one capture this sandbox runs

@@ -90,7 +90,8 @@ export function browseView({ tab, data, recent, pending, failed, device = "phone
       mergeWithKinoBar: true,
       dense: true,
       divider: false,
-      leading: { type: "IconButton", key: "close", icon: "close", ...twin("brClose", "labelText"), ...twin("brClose", "tooltip"), onPressed: { go: { close: true } } },
+      // A back arrow, not an X, like the author's other plugins (owner, 2026-11-23): it leaves the screen.
+      leading: { type: "IconButton", key: "close", icon: "arrow_back", ...twin("brBack", "labelText"), ...twin("brBack", "tooltip"), onPressed: { go: { close: true } } },
       // On a TV the search is a button of the bar (a floating one is hard to reach with a remote); elsewhere it floats.
       // Share (text only, to Kino Social), then settings; on a TV search leads.
       actions: tv
