@@ -40,6 +40,7 @@ var WORDS = {
     shelfNew: "Estrenos",
     shelfPop: "Populares",
     shelfTop: "Mejor valoradas",
+    shelfAnime: "Anime en emisi\xF3n",
     // genres (TMDB ids)
     g28: "Acci\xF3n",
     g12: "Aventura",
@@ -123,6 +124,7 @@ var WORDS = {
     shelfNew: "New releases",
     shelfPop: "Popular",
     shelfTop: "Top rated",
+    shelfAnime: "Anime airing now",
     g28: "Action",
     g12: "Adventure",
     g16: "Animation",
@@ -459,19 +461,23 @@ var GENRES = {
   series: [10759, 16, 35, 80, 99, 18, 10751, 9648, 10765]
 };
 var TABS = {
-  inicio: [["movie", "trend", true], ["series", "trend", true], ["movie", "new", true], ["series", "pop", true], ["movie", "top", true], ["series", "top", true]],
+  inicio: [["movie", "trend", true], ["series", "trend", true], ["movie", "new", true], ["series", "pop", true], ["series", "anime", false], ["movie", "g10751", true], ["movie", "top", true], ["series", "top", true]],
   peliculas: [["movie", "trend"], ["movie", "new"], ["movie", "pop"], ["movie", "top"], ["movie", "g28"], ["movie", "g35"], ["movie", "g878"], ["movie", "g27"]],
   series: [["series", "trend"], ["series", "new"], ["series", "pop"], ["series", "top"], ["series", "g10759"], ["series", "g18"], ["series", "g10765"], ["series", "g9648"]]
 };
 var TAB_IDS = Object.keys(TABS);
 var TAB_KEYS = { inicio: "tabHome", peliculas: "tabMovies", series: "tabSeries" };
-var HOME_JOBS = TABS.inicio.slice(0, 4);
+var HOME_JOBS = TABS.inicio.slice(0, 6);
 var typeName = (type) => t(type === "movie" ? "tabMovies" : "tabSeries");
 function shelfInfo(type, shelf) {
   if (!TYPES.includes(type)) return null;
   const k = TV_OR_MOVIE[type];
   if (shelf === "trend") return { titleKey: "shelfTrend", path: `/trending/${k}/week`, params: {} };
   if (shelf === "new") return { titleKey: "shelfNew", path: type === "movie" ? "/movie/now_playing" : "/tv/on_the_air", params: {} };
+  if (shelf === "anime" && type === "series") {
+    const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+    return { titleKey: "shelfAnime", path: "/discover/tv", params: { sort_by: "first_air_date.desc", with_genres: 16, with_origin_country: "JP", "air_date.gte": day(Date.now() - 21 * 864e5), "air_date.lte": day(Date.now()) } };
+  }
   if (shelf === "pop") return { titleKey: "shelfPop", path: `/discover/${k}`, params: { sort_by: "popularity.desc", "vote_count.gte": 50 } };
   if (shelf === "top") return { titleKey: "shelfTop", path: `/discover/${k}`, params: { sort_by: "vote_average.desc", "vote_count.gte": 1500 } };
   const m = /^g(\d{1,6})$/.exec(String(shelf));
@@ -502,6 +508,7 @@ async function fetchPage(type, shelf, page) {
 }
 var pageKey = (type, shelf) => `shelf2:${type}:${shelf}:${langOf()}`;
 var firstPage = (type, shelf) => cached(pageKey(type, shelf), FRESH_SHELF_MS, () => fetchPage(type, shelf, 1));
+var rowGenre = (type, shelf) => shelf === "anime" ? "anime" : shelf === "g10751" ? "infantil" : type === "movie" ? "peliculas" : "series";
 function rowOf(type, shelf, prefixed, page) {
   const info = shelfInfo(type, shelf);
   const name = t(info.titleKey);
@@ -509,7 +516,7 @@ function rowOf(type, shelf, prefixed, page) {
     id: `d-${type}-${shelf}`,
     title: prefixed ? `${name} \xB7 ${typeName(type)}` : name,
     ref: shelfRef(type, shelf),
-    genre: type === "movie" ? "peliculas" : "series",
+    genre: rowGenre(type, shelf),
     items: page.items.slice(0, ROW_MAX)
   };
 }

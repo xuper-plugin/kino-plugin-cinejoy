@@ -34,7 +34,7 @@ export async function search(query) {
   return lean ? [...sorted.filter((i) => i.kind === lean), ...sorted.filter((i) => i.kind !== lean)] : sorted;
 }
 
-/** `home()`: four shelves on Kino's Inicio, unless the person turned them off; the last good rows when TMDB is down. */
+/** `home()`: six shelves on Kino's Inicio, unless the person turned them off; the last good rows when TMDB is down. */
 export async function home() {
   if (!readSettings().homeRows) return [];
   return homeRows();

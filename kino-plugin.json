@@ -1,7 +1,7 @@
 {
   "id": "cinejoy",
   "name": "Cinejoy",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "apiVersion": 9,
   "streamHosts": "any",
   "browser": true,
@@ -165,5 +165,9 @@
   },
   "recommends": [
     "kinotvapp/kino-social"
-  ]
+  ],
+  "signature": {
+    "authorKey": "6693946bd5c56196960959c4b9665fad5094374bcb85ddb282f8bf762c835263",
+    "value": "8a42c444ca27a8a09014a202bb4c38ea81d43df3b79aa3353361b15a0ef17d64d2d45eb2a78753aecdd922d6b345dda0647a7fab6103ba38a62cfae01b023e00"
+  }
 }

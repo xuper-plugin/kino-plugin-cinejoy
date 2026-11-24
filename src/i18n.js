@@ -8,6 +8,7 @@ const WORDS = {
     shelfNew: "Estrenos",
     shelfPop: "Populares",
     shelfTop: "Mejor valoradas",
+    shelfAnime: "Anime en emisión",
     // genres (TMDB ids)
     g28: "Acción",
     g12: "Aventura",
@@ -91,6 +92,7 @@ const WORDS = {
     shelfNew: "New releases",
     shelfPop: "Popular",
     shelfTop: "Top rated",
+    shelfAnime: "Anime airing now",
     g28: "Action",
     g12: "Adventure",
     g16: "Animation",

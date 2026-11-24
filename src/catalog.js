@@ -20,14 +20,14 @@ export const GENRES = {
 
 /** The tabs, each a list of `[type, shelf, prefixed]` jobs (prefixed: the row title names the type, as the tab mixes both). */
 export const TABS = {
-  inicio: [["movie", "trend", true], ["series", "trend", true], ["movie", "new", true], ["series", "pop", true], ["movie", "top", true], ["series", "top", true]],
+  inicio: [["movie", "trend", true], ["series", "trend", true], ["movie", "new", true], ["series", "pop", true], ["series", "anime", false], ["movie", "g10751", true], ["movie", "top", true], ["series", "top", true]],
   peliculas: [["movie", "trend"], ["movie", "new"], ["movie", "pop"], ["movie", "top"], ["movie", "g28"], ["movie", "g35"], ["movie", "g878"], ["movie", "g27"]],
   series: [["series", "trend"], ["series", "new"], ["series", "pop"], ["series", "top"], ["series", "g10759"], ["series", "g18"], ["series", "g10765"], ["series", "g9648"]],
 };
 export const TAB_IDS = Object.keys(TABS);
 const TAB_KEYS = { inicio: "tabHome", peliculas: "tabMovies", series: "tabSeries" };
-/** What Kino's own Home shows: the first rows of the Inicio tab. */
-export const HOME_JOBS = TABS.inicio.slice(0, 4);
+/** What Kino's own Home shows: the first rows of the Inicio tab (movies, series, the new anime and the family movies). */
+export const HOME_JOBS = TABS.inicio.slice(0, 6);
 
 const typeName = (type) => t(type === "movie" ? "tabMovies" : "tabSeries");
 
@@ -37,6 +37,11 @@ export function shelfInfo(type, shelf) {
   const k = TV_OR_MOVIE[type];
   if (shelf === "trend") return { titleKey: "shelfTrend", path: `/trending/${k}/week`, params: {} };
   if (shelf === "new") return { titleKey: "shelfNew", path: type === "movie" ? "/movie/now_playing" : "/tv/on_the_air", params: {} };
+  // What is new in anime: Japanese animation with an episode aired in the last 3 weeks, the newest series first (a new show has no votes yet).
+  if (shelf === "anime" && type === "series") {
+    const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+    return { titleKey: "shelfAnime", path: "/discover/tv", params: { sort_by: "first_air_date.desc", with_genres: 16, with_origin_country: "JP", "air_date.gte": day(Date.now() - 21 * 86400000), "air_date.lte": day(Date.now()) } };
+  }
   if (shelf === "pop") return { titleKey: "shelfPop", path: `/discover/${k}`, params: { sort_by: "popularity.desc", "vote_count.gte": 50 } };
   if (shelf === "top") return { titleKey: "shelfTop", path: `/discover/${k}`, params: { sort_by: "vote_average.desc", "vote_count.gte": 1500 } };
   const m = /^g(\d{1,6})$/.exec(String(shelf));
@@ -75,6 +80,9 @@ const pageKey = (type, shelf) => `shelf2:${type}:${shelf}:${langOf()}`;
 /** A shelf's first page, cached. */
 const firstPage = (type, shelf) => cached(pageKey(type, shelf), FRESH_SHELF_MS, () => fetchPage(type, shelf, 1));
 
+/** The type Kino's Home by categories files a row under: the anime shelf is Anime, the Familia shelf Infantil, the rest by type. */
+export const rowGenre = (type, shelf) => (shelf === "anime" ? "anime" : shelf === "g10751" ? "infantil" : type === "movie" ? "peliculas" : "series");
+
 function rowOf(type, shelf, prefixed, page) {
   const info = shelfInfo(type, shelf);
   const name = t(info.titleKey);
@@ -82,7 +90,7 @@ function rowOf(type, shelf, prefixed, page) {
     id: `d-${type}-${shelf}`,
     title: prefixed ? `${name} · ${typeName(type)}` : name,
     ref: shelfRef(type, shelf),
-    genre: type === "movie" ? "peliculas" : "series",
+    genre: rowGenre(type, shelf),
     items: page.items.slice(0, ROW_MAX),
   };
 }

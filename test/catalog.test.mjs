@@ -148,14 +148,14 @@ test("browse(): page 1 comes from the cache, later pages from TMDB with a cursor
   assert.deepEqual(await browsePage("garbage"), { items: [] });
 });
 
-test("home(): four rows, kept as home1 (7 days, at most 60 KB), off when the toggle is off", async () => {
+test("home(): six rows, kept as home1 (7 days, at most 60 KB), off when the toggle is off", async () => {
   const { kino, ttls, data } = install({ tmdb: answer });
   const rows = await home();
-  assert.equal(rows.length, 4);
+  assert.equal(rows.length, 6);
   assert.ok(rows.every((r) => r.items.length > 0 && r.ref.startsWith("d:")));
   assert.equal(ttls.get(HOME_KEY), 7 * 24 * 3600 * 1000);
   assert.ok(data.get(HOME_KEY).length <= 60 * 1024);
-  assert.equal(savedHome().length, 4);
+  assert.equal(savedHome().length, 6);
   kino.config.get = (k) => (k === "homeRows" ? false : undefined);
   assert.deepEqual(await home(), []);
 });
@@ -165,7 +165,7 @@ test("home(): when every shelf fails, the last kept Home is served", async () =>
   await home();
   for (const k of [...data.keys()]) if (k.startsWith("c1:")) data.delete(k);
   kino.tmdb = async () => { throw Object.assign(new Error("down"), { code: "network" }); };
-  assert.equal((await home()).length, 4);
+  assert.equal((await home()).length, 6);
 });
 
 test("home1 is trimmed until it fits", async () => {
@@ -245,4 +245,20 @@ test("setWithRoom evicts the oldest cache entries when storage is full and never
     assert.ok(kino.storage.get("logo1"), "logo1 untouched");
     assert.equal(kino.storage.get("browse1:inicio").length, 60 * 1024);
   } finally { Date.now = realNow; }
+});
+
+test("Home rows carry the type Kino files them under: Películas, Series, the new anime as Anime, Familia as Infantil", async () => {
+  const { calls } = install({ tmdb: answer });
+  const rows = await homeRows();
+  assert.deepEqual(rows.map((r) => [r.id, r.genre]), [
+    ["d-movie-trend", "peliculas"], ["d-series-trend", "series"], ["d-movie-new", "peliculas"], ["d-series-pop", "series"],
+    ["d-series-anime", "anime"], ["d-movie-g10751", "infantil"],
+  ]);
+  const anime = calls.tmdb.find((c) => c.path === "/discover/tv" && c.params.with_genres === 16);
+  assert.equal(anime.params.with_origin_country, "JP");
+  assert.equal(anime.params.sort_by, "first_air_date.desc");
+  assert.match(anime.params["air_date.gte"], /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(anime.params["air_date.gte"] < anime.params["air_date.lte"]);
+  assert.equal(anime.params["vote_count.gte"], undefined);
+  assert.equal(shelfInfo("movie", "anime"), null);
 });
